@@ -1,0 +1,51 @@
+# Keeps the free instance awake during active hours.
+#
+# Why this exists: Render's free web services spin down after 15 minutes of
+# inactivity, and the next request then waits ~1 minute for a cold start.
+#
+# Why it does NOT run around the clock: a free account gets 750 instance-hours
+# per month. Pinging 24/7 keeps the service up for ~730 h, which fits but leaves
+# no headroom and would push you over the moment you add a second free service.
+# The window below (01:00-19:00 UTC ≈ 06:30-00:30 IST) costs ~560 h/month.
+#
+# Scheduled GitHub Actions runs can drift by several minutes when the platform is
+# busy, so the interval is 10 minutes rather than 14 — close enough to stay
+# inside the 15-minute idle window even after drift.
+#
+# SETUP: add a repository secret named SERVICE_URL containing the service's base
+# URL, e.g. https://your-service.onrender.com
+# (Settings → Secrets and variables → Actions → New repository secret)
+# No API key is needed: /health is intentionally unauthenticated.
+
+name: keep-alive
+
+on:
+  schedule:
+    - cron: "*/10 1-19 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping /health
+        env:
+          SERVICE_URL: ${{ secrets.SERVICE_URL }}
+        run: |
+          if [ -z "$SERVICE_URL" ]; then
+            echo "SERVICE_URL secret is not set; nothing to ping."
+            exit 0
+          fi
+          # --max-time 90 tolerates a cold start that is already in progress.
+          code=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 90 \
+                  "${SERVICE_URL%/}/health" || echo 000)
+          echo "HTTP $code"
+          cat /tmp/health.json || true
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::warning::health check returned $code"
+          fi

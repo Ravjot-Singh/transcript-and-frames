@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transcript and Frames — Test Console</title>
+<style>
+  :root {
+    --bg: #fbfbfa;
+    --panel: #ffffff;
+    --border: #e4e2dd;
+    --text: #1c1b19;
+    --muted: #6b6862;
+    --accent: #2f6f4f;
+    --accent-soft: #e8f1eb;
+    --error: #a33a28;
+    --error-soft: #fbeae6;
+    --code-bg: #f4f3f0;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17181a;
+      --panel: #1f2123;
+      --border: #32353a;
+      --text: #e8e6e3;
+      --muted: #9b9892;
+      --accent: #74c49b;
+      --accent-soft: #1e2d26;
+      --error: #e4927f;
+      --error-soft: #2e201d;
+      --code-bg: #15171a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #17181a;
+    --panel: #1f2123;
+    --border: #32353a;
+    --text: #e8e6e3;
+    --muted: #9b9892;
+    --accent: #74c49b;
+    --accent-soft: #1e2d26;
+    --error: #e4927f;
+    --error-soft: #2e201d;
+    --code-bg: #15171a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 16px 80px; }
+
+  header { margin-bottom: 28px; }
+  h1 { font-size: 1.5rem; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); margin: 0; font-size: 0.93rem; }
+  h2 {
+    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 0 0 14px; font-weight: 600;
+  }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; margin-bottom: 18px;
+  }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 220px; min-width: 0; }
+
+  label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 5px; }
+  input, select {
+    width: 100%; padding: 9px 11px; font: inherit; font-size: 0.9rem;
+    color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 7px;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  input::placeholder { color: var(--muted); opacity: 0.7; }
+
+  button {
+    font: inherit; font-size: 0.9rem; font-weight: 500; cursor: pointer;
+    padding: 9px 16px; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--panel); color: var(--text);
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: 0.5; cursor: progress; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  button.ghost { padding: 6px 10px; font-size: 0.8rem; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+
+  .hint { font-size: 0.8rem; color: var(--muted); margin: 8px 0 0; }
+  .hint code { background: var(--code-bg); padding: 1px 4px; border-radius: 3px; }
+
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 7px;
+    padding: 12px; margin: 0; overflow-x: auto;
+    font: 12.5px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .io { display: grid; gap: 14px; grid-template-columns: 1fr; }
+  @media (min-width: 820px) { .io { grid-template-columns: 1fr 1fr; } }
+  .io h3 {
+    font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted); margin: 0 0 7px; font-weight: 600;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+
+  .status { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .pill {
+    font: 600 0.74rem/1 ui-monospace, Menlo, Consolas, monospace;
+    padding: 5px 9px; border-radius: 999px; border: 1px solid var(--border);
+    background: var(--code-bg); color: var(--muted);
+  }
+  .pill.ok { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .pill.bad { background: var(--error-soft); border-color: var(--error); color: var(--error); }
+
+  .transcript {
+    background: var(--accent-soft); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 7px; padding: 14px; margin-bottom: 12px;
+    font-size: 1.02rem; line-height: 1.6;
+  }
+  .meta-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px; margin-bottom: 12px;
+  }
+  .meta-grid div {
+    border: 1px solid var(--border); border-radius: 7px; padding: 9px 11px;
+    background: var(--code-bg);
+  }
+  .meta-grid dt { font-size: 0.72rem; color: var(--muted); margin: 0 0 3px; }
+  .meta-grid dd {
+    margin: 0; font: 600 0.95rem/1.3 ui-monospace, Menlo, Consolas, monospace;
+    word-break: break-all;
+  }
+
+  .timeline {
+    position: relative; height: 46px; margin: 6px 0 16px;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 7px;
+  }
+  .timeline i {
+    position: absolute; top: 7px; width: 2px; height: 22px;
+    background: var(--accent); transform: translateX(-1px); border-radius: 1px;
+  }
+  .timeline .mid {
+    position: absolute; top: 0; bottom: 0; width: 1px;
+    background: var(--border); left: 50%;
+  }
+  .timeline span {
+    position: absolute; bottom: 4px; font-size: 0.68rem; color: var(--muted);
+  }
+  .timeline span.l { left: 7px; }
+  .timeline span.c { left: 50%; transform: translateX(-50%); }
+  .timeline span.r { right: 7px; }
+
+  .frames {
+    display: grid; gap: 9px;
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  }
+  .frames figure { margin: 0; }
+  .frames img {
+    width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block;
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px;
+  }
+  .frames figcaption {
+    font: 0.72rem/1.4 ui-monospace, Menlo, Consolas, monospace;
+    color: var(--muted); margin-top: 4px; text-align: center;
+  }
+
+  details { margin-top: 10px; }
+  details > summary {
+    cursor: pointer; font-size: 0.85rem; color: var(--muted);
+    padding: 4px 0; list-style: none;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: "▸ "; }
+  details[open] > summary::before { content: "▾ "; }
+
+  .banner {
+    border: 1px solid var(--border); border-left: 3px solid var(--error);
+    background: var(--error-soft); color: var(--text);
+    border-radius: 7px; padding: 11px 13px; font-size: 0.85rem; margin-bottom: 14px;
+  }
+  .note {
+    border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 7px; padding: 11px 13px; font-size: 0.82rem; margin-bottom: 18px;
+  }
+  .note p { margin: 0 0 6px; }
+  .note p:last-child { margin: 0; }
+  .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+  .hidden { display: none !important; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="topbar">
+  <div>
+    <h1>Transcript &amp; Frames — test console</h1>
+    <p class="sub">Send real requests to both endpoints and inspect exactly what went out and came back.</p>
+  </div>
+  <button class="ghost" id="theme" title="Toggle theme">◐</button>
+</header>
+
+<div class="note">
+  <p><strong>This page is a testing tool, not a production frontend.</strong> The API key you
+  type below is kept in this browser's local storage and sent as the <code>x-api-key</code>
+  header. A browser cannot hold a secret, so never put a production key into a page you expose
+  publicly — set <code>ENABLE_DEMO=false</code> on a deployment that strangers can reach.</p>
+  <p>Served from the same origin as the API, so no CORS configuration is involved. Frame
+  thumbnails below load straight from Cloudinary's CDN — none of those bytes pass through the
+  service.</p>
+</div>
+
+<!-- ------------------------------------------------------------ connection -->
+<section class="panel">
+  <h2>Connection</h2>
+  <div class="row">
+    <div>
+      <label for="base">Service base URL</label>
+      <input id="base" placeholder="(same origin)" autocomplete="off">
+    </div>
+    <div>
+      <label for="key">API key <span id="keystate"></span></label>
+      <input id="key" type="password" placeholder="value of API_KEY" autocomplete="off">
+    </div>
+  </div>
+  <div class="actions">
+    <button id="health">Check /health</button>
+    <button class="ghost" id="forget">Forget key</button>
+    <span class="hint" id="healthout"></span>
+  </div>
+  <p class="hint">Leave the base URL blank to call this same deployment. Fill it in only to
+  drive a different instance — that is a cross-origin call, so its
+  <code>ALLOWED_ORIGINS</code> must include this page's origin.</p>
+</section>
+
+<!-- ----------------------------------------------------------- the video -->
+<section class="panel">
+  <h2>Source video</h2>
+  <div>
+    <label for="url">Cloudinary video delivery URL</label>
+    <input id="url" placeholder="https://res.cloudinary.com/&lt;cloud&gt;/video/upload/v1/clip.mp4"
+           autocomplete="off">
+  </div>
+  <div class="actions">
+    <button class="ghost" id="sample">Use a public sample</button>
+    <span class="hint">Cloudinary's <code>demo</code> cloud, for checking the plumbing without your own asset.</span>
+  </div>
+
+  <details id="uploadbox">
+    <summary>Upload a video to Cloudinary from this page (optional)</summary>
+    <p class="hint">This mirrors the real flow: the browser uploads to Cloudinary, then the
+    backend only ever sees a URL. Needs an <strong>unsigned</strong> upload preset
+    (Cloudinary console → Settings → Upload → Upload presets → signing mode
+    <em>Unsigned</em>). Nothing here is sent to this service.</p>
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label for="cloud">Cloud name</label>
+        <input id="cloud" placeholder="your-cloud-name" autocomplete="off">
+      </div>
+      <div>
+        <label for="preset">Unsigned upload preset</label>
+        <input id="preset" placeholder="preset-name" autocomplete="off">
+      </div>
+    </div>
+    <div class="actions">
+      <input type="file" id="file" accept="video/*" style="flex:1 1 260px">
+      <button id="upload">Upload</button>
+      <span class="hint" id="uploadout"></span>
+    </div>
+  </details>
+</section>
+
+<!-- ----------------------------------------------------------- translate -->
+<section class="panel">
+  <h2>POST /v1/translate</h2>
+  <p class="hint" style="margin:0 0 12px">Derives an audio-only Cloudinary URL, streams that
+  audio to Whisper, returns English text. Source language is detected, never configured.</p>
+  <div class="actions" style="margin-top:0">
+    <button class="primary" id="run-translate">Send request</button>
+    <button class="ghost" id="curl-translate">Copy as curl</button>
+    <span class="hint" id="translate-note"></span>
+  </div>
+
+  <div id="translate-out" class="hidden" style="margin-top:16px">
+    <div class="status" id="translate-status"></div>
+    <div id="translate-text"></div>
+    <div class="meta-grid" id="translate-meta"></div>
+    <div class="io">
+      <div>
+        <h3>Request</h3>
+        <pre id="translate-req"></pre>
+      </div>
+      <div>
+        <h3>Response <button class="ghost" data-copy="translate-res">copy</button></h3>
+        <pre id="translate-res"></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- -------------------------------------------------------------- frames -->
+<section class="panel">
+  <h2>POST /v1/frames</h2>
+  <p class="hint" style="margin:0 0 12px">Chooses how many frames the duration deserves, places
+  them by inverse-normal quantiles, and returns one Cloudinary URL each. No media is fetched,
+  decoded or stored by the service.</p>
+  <div class="row">
+    <div>
+      <label for="dur">duration_sec <span class="hint">(from the Cloudinary upload response)</span></label>
+      <input id="dur" type="number" step="0.001" min="0.001" value="90" autocomplete="off">
+    </div>
+    <div>
+      <label for="vid">video_id</label>
+      <input id="vid" value="demo-video" autocomplete="off">
+    </div>
+  </div>
+  <div class="actions">
+    <button class="primary" id="run-frames">Send request</button>
+    <button class="ghost" id="curl-frames">Copy as curl</button>
+    <span class="hint" id="frames-note"></span>
+  </div>
+
+  <div id="frames-out" class="hidden" style="margin-top:16px">
+    <div class="status" id="frames-status"></div>
+    <div class="meta-grid" id="frames-meta"></div>
+    <div id="frames-timeline"></div>
+    <div class="frames" id="frames-grid"></div>
+    <div class="io" style="margin-top:14px">
+      <div>
+        <h3>Request</h3>
+        <pre id="frames-req"></pre>
+      </div>
+      <div>
+        <h3>Response <button class="ghost" data-copy="frames-res">copy</button></h3>
+        <pre id="frames-res"></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<p class="hint" style="text-align:center">
+  Full schema at <a href="/docs">/docs</a> · service banner at <a href="/">/</a>
+</p>
+
+</div>
+<script>
+(function () {
+  "use strict";
+
+  const $ = (id) => document.getElementById(id);
+  const SAMPLE = "https://res.cloudinary.com/demo/video/upload/dog.mp4";
+  const STORE = "tf-console";
+
+  // ---------------------------------------------------------------- storage
+  // localStorage can throw in private windows or with site data blocked, so
+  // every access is guarded and the page works fine without it.
+  function load() {
+    try { return JSON.parse(localStorage.getItem(STORE) || "{}"); }
+    catch (e) { return {}; }
+  }
+  function save(patch) {
+    try {
+      localStorage.setItem(STORE, JSON.stringify(Object.assign(load(), patch)));
+    } catch (e) { /* non-fatal */ }
+  }
+
+  const saved = load();
+  $("base").value = saved.base || "";
+  $("key").value = saved.key || "";
+  $("url").value = saved.url || "";
+  $("cloud").value = saved.cloud || "";
+  $("preset").value = saved.preset || "";
+  if (saved.dur) $("dur").value = saved.dur;
+  if (saved.theme) document.documentElement.dataset.theme = saved.theme;
+  $("keystate").textContent = saved.key ? "· remembered" : "";
+
+  ["base", "key", "url", "cloud", "preset", "dur"].forEach((id) => {
+    $(id).addEventListener("change", () => save({ [id]: $(id).value.trim() }));
+  });
+
+  $("forget").addEventListener("click", () => {
+    $("key").value = "";
+    save({ key: "" });
+    $("keystate").textContent = "· cleared";
+  });
+
+  $("theme").addEventListener("click", () => {
+    const root = document.documentElement;
+    const now = root.dataset.theme === "dark" ? "light" : "dark";
+    root.dataset.theme = now;
+    save({ theme: now });
+  });
+
+  $("sample").addEventListener("click", () => {
+    $("url").value = SAMPLE;
+    $("dur").value = 15;
+    save({ url: SAMPLE, dur: "15" });
+  });
+
+  // ------------------------------------------------------------------ utils
+  const base = () => $("base").value.trim().replace(/\/+$/, "");
+  const key = () => $("key").value.trim();
+
+  function requestPreview(path, body) {
+    const shown = key() ? key().slice(0, 3) + "…" + "•".repeat(8) : "(not set)";
+    return [
+      "POST " + (base() || location.origin) + path,
+      "content-type: application/json",
+      "x-api-key: " + shown,
+      "",
+      JSON.stringify(body, null, 2),
+    ].join("\n");
+  }
+
+  function asCurl(path, body) {
+    return (
+      "curl -X POST " + (base() || location.origin) + path +
+      " \\\n  -H 'content-type: application/json'" +
+      " \\\n  -H \"x-api-key: $API_KEY\"" +
+      " \\\n  -d '" + JSON.stringify(body) + "'"
+    );
+  }
+
+  async function copy(text, el, label) {
+    try {
+      await navigator.clipboard.writeText(text);
+      el.textContent = (label || "Copied") + " ✓";
+    } catch (e) {
+      el.textContent = "Clipboard blocked — the request is shown below.";
+    }
+    setTimeout(() => { el.textContent = ""; }, 2600);
+  }
+
+  document.querySelectorAll("[data-copy]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const original = btn.textContent;
+      navigator.clipboard.writeText($(btn.dataset.copy).textContent)
+        .then(() => { btn.textContent = "copied"; })
+        .catch(() => { btn.textContent = "blocked"; })
+        .finally(() => setTimeout(() => { btn.textContent = original; }, 1800));
+    });
+  });
+
+  function pill(text, kind) {
+    const span = document.createElement("span");
+    span.className = "pill" + (kind ? " " + kind : "");
+    span.textContent = text;
+    return span;
+  }
+
+  function metaGrid(host, pairs) {
+    host.innerHTML = "";
+    pairs.forEach(([term, value]) => {
+      if (value === null || value === undefined || value === "") return;
+      const box = document.createElement("div");
+      const dt = document.createElement("dt");
+      dt.textContent = term;
+      const dd = document.createElement("dd");
+      dd.textContent = value;
+      box.append(dt, dd);
+      host.append(box);
+    });
+  }
+
+  function banner(host, message) {
+    host.innerHTML = "";
+    const div = document.createElement("div");
+    div.className = "banner";
+    div.textContent = message;
+    host.append(div);
+  }
+
+  // -------------------------------------------------------------- the call
+  async function send(path, body) {
+    if (!key()) throw new Error("Set the API key first — both /v1 routes require it.");
+    const started = performance.now();
+    const response = await fetch(base() + path, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key() },
+      body: JSON.stringify(body),
+    });
+    const elapsed = Math.round(performance.now() - started);
+    const raw = await response.text();
+    let parsed = null;
+    try { parsed = JSON.parse(raw); } catch (e) { /* keep raw */ }
+    return { status: response.status, ok: response.ok, raw: raw, json: parsed, elapsed: elapsed };
+  }
+
+  function showStatus(host, result) {
+    host.innerHTML = "";
+    host.append(pill("HTTP " + result.status, result.ok ? "ok" : "bad"));
+    host.append(pill(result.elapsed + " ms round trip"));
+    if (result.json && typeof result.json.elapsed_sec === "number") {
+      host.append(pill(result.json.elapsed_sec + " s server-side"));
+    }
+    if (!result.ok && result.json && result.json.error) {
+      host.append(pill(result.json.error, "bad"));
+    }
+    if (!result.ok && result.json && result.json.correlation_id) {
+      host.append(pill("id " + result.json.correlation_id));
+    }
+  }
+
+  function pretty(result) {
+    return result.json ? JSON.stringify(result.json, null, 2) : (result.raw || "(empty body)");
+  }
+
+  // ------------------------------------------------------------ /health
+  $("health").addEventListener("click", async () => {
+    const out = $("healthout");
+    out.textContent = "checking…";
+    try {
+      const response = await fetch(base() + "/health");
+      const data = await response.json();
+      out.textContent = "HTTP " + response.status + " · " + JSON.stringify(data);
+    } catch (e) {
+      out.textContent = "unreachable: " + e.message;
+    }
+  });
+
+  // --------------------------------------------------------- /v1/translate
+  function translateBody() {
+    return { cloudinary_url: $("url").value.trim() };
+  }
+
+  $("curl-translate").addEventListener("click", () =>
+    copy(asCurl("/v1/translate", translateBody()), $("translate-note"), "curl copied"));
+
+  $("run-translate").addEventListener("click", async () => {
+    const button = $("run-translate");
+    const note = $("translate-note");
+    if (!$("url").value.trim()) { note.textContent = "Enter a Cloudinary video URL."; return; }
+
+    $("translate-out").classList.remove("hidden");
+    $("translate-req").textContent = requestPreview("/v1/translate", translateBody());
+    $("translate-res").textContent = "";
+    $("translate-text").innerHTML = "";
+    $("translate-meta").innerHTML = "";
+    $("translate-status").innerHTML = "";
+    button.disabled = true;
+    note.textContent = "transcribing — this spends Groq audio quota…";
+
+    try {
+      const result = await send("/v1/translate", translateBody());
+      note.textContent = "";
+      showStatus($("translate-status"), result);
+      $("translate-res").textContent = pretty(result);
+
+      if (result.ok && result.json) {
+        const data = result.json;
+        const box = document.createElement("div");
+        box.className = "transcript";
+        box.textContent = data.english_text || "(the provider returned no speech)";
+        $("translate-text").append(box);
+        metaGrid($("translate-meta"), [
+          ["detected language", data.detected_language || "—"],
+          ["audio duration", data.audio_duration_sec != null ? data.audio_duration_sec + " s" : "—"],
+          ["confidence (" + (data.confidence_scale || "n/a") + ")", data.transcription_confidence],
+          ["provider", data.provider],
+          ["upload path", data.upload_path],
+          ["native text", data.native_text || "not requested"],
+        ]);
+      } else {
+        banner($("translate-text"),
+          (result.json && result.json.message) || "Request failed — see the response below.");
+      }
+    } catch (e) {
+      note.textContent = "";
+      banner($("translate-text"), e.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  // ------------------------------------------------------------ /v1/frames
+  function framesBody() {
+    return {
+      cloudinary_url: $("url").value.trim(),
+      video_id: $("vid").value.trim() || "demo-video",
+      duration_sec: Number($("dur").value),
+    };
+  }
+
+  $("curl-frames").addEventListener("click", () =>
+    copy(asCurl("/v1/frames", framesBody()), $("frames-note"), "curl copied"));
+
+  function drawTimeline(host, stamps, duration) {
+    host.innerHTML = "";
+    if (!stamps.length || !duration) return;
+    const bar = document.createElement("div");
+    bar.className = "timeline";
+
+    const mid = document.createElement("div");
+    mid.className = "mid";
+    bar.append(mid);
+
+    stamps.forEach((t) => {
+      const tick = document.createElement("i");
+      tick.style.left = (100 * t / duration) + "%";
+      tick.title = t + " s";
+      bar.append(tick);
+    });
+
+    [["l", "0 s"], ["c", "midpoint"], ["r", duration + " s"]].forEach(([cls, text]) => {
+      const label = document.createElement("span");
+      label.className = cls;
+      label.textContent = text;
+      bar.append(label);
+    });
+
+    host.append(bar);
+    const caption = document.createElement("p");
+    caption.className = "hint";
+    caption.style.marginTop = "-8px";
+    caption.textContent =
+      "Each tick is one sampled frame. They bunch toward the midpoint because the timestamps " +
+      "are inverse-normal quantiles rather than evenly spaced.";
+    host.append(caption);
+  }
+
+  function drawFrames(host, frames) {
+    host.innerHTML = "";
+    frames.forEach((frame) => {
+      const figure = document.createElement("figure");
+      const img = document.createElement("img");
+      img.loading = "lazy";
+      img.src = frame.url;
+      img.alt = "frame at " + frame.timestamp_sec + " s";
+      img.addEventListener("error", () => {
+        img.replaceWith(Object.assign(document.createElement("pre"), {
+          textContent: "could not load\n(401 here means your\naccount uses strict\ntransformations)",
+          style: "font-size:10px;margin:0",
+        }));
+      });
+      const caption = document.createElement("figcaption");
+      const link = document.createElement("a");
+      link.href = frame.url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = "#" + frame.index + " · " + frame.timestamp_sec + "s";
+      caption.append(link);
+      figure.append(img, caption);
+      host.append(figure);
+    });
+  }
+
+  $("run-frames").addEventListener("click", async () => {
+    const button = $("run-frames");
+    const note = $("frames-note");
+    if (!$("url").value.trim()) { note.textContent = "Enter a Cloudinary video URL."; return; }
+    if (!(Number($("dur").value) > 0)) { note.textContent = "duration_sec must be greater than 0."; return; }
+
+    const body = framesBody();
+    $("frames-out").classList.remove("hidden");
+    $("frames-req").textContent = requestPreview("/v1/frames", body);
+    $("frames-res").textContent = "";
+    $("frames-grid").innerHTML = "";
+    $("frames-timeline").innerHTML = "";
+    $("frames-meta").innerHTML = "";
+    $("frames-status").innerHTML = "";
+    button.disabled = true;
+
+    try {
+      const result = await send("/v1/frames", body);
+      note.textContent = "";
+      showStatus($("frames-status"), result);
+      $("frames-res").textContent = pretty(result);
+
+      if (result.ok && result.json) {
+        const data = result.json;
+        metaGrid($("frames-meta"), [
+          ["requested by the curve", data.requested_frame_count],
+          ["returned", data.frame_count],
+          ["video_id", data.video_id],
+          ["delivery", data.delivery],
+        ]);
+        drawTimeline($("frames-timeline"), data.timestamps_sec || [], body.duration_sec);
+        drawFrames($("frames-grid"), data.frames || []);
+      } else {
+        banner($("frames-meta"),
+          (result.json && result.json.message) || "Request failed — see the response below.");
+      }
+    } catch (e) {
+      note.textContent = "";
+      banner($("frames-meta"), e.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  // --------------------------------------------- optional Cloudinary upload
+  $("upload").addEventListener("click", async () => {
+    const out = $("uploadout");
+    const cloud = $("cloud").value.trim();
+    const preset = $("preset").value.trim();
+    const file = $("file").files[0];
+
+    if (!cloud || !preset) { out.textContent = "Cloud name and unsigned preset are required."; return; }
+    if (!file) { out.textContent = "Choose a video file first."; return; }
+
+    const form = new FormData();
+    form.append("file", file);
+    form.append("upload_preset", preset);
+
+    $("upload").disabled = true;
+    out.textContent = "uploading " + Math.round(file.size / 1024) + " KB to Cloudinary…";
+    try {
+      const response = await fetch(
+        "https://api.cloudinary.com/v1_1/" + encodeURIComponent(cloud) + "/video/upload",
+        { method: "POST", body: form }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        out.textContent = "Cloudinary said " + response.status + ": " +
+          ((data.error && data.error.message) || "upload failed");
+        return;
+      }
+      // secure_url, duration, width and height are exactly the metadata the
+      // upload backend is expected to forward to /v1/frames.
+      $("url").value = data.secure_url || "";
+      if (data.duration) $("dur").value = data.duration;
+      if (data.public_id) $("vid").value = data.public_id;
+      save({ url: $("url").value, dur: String($("dur").value) });
+      out.textContent = "uploaded · duration " + (data.duration || "?") + " s · " +
+        (data.width || "?") + "×" + (data.height || "?");
+    } catch (e) {
+      out.textContent = "upload failed: " + e.message;
+    } finally {
+      $("upload").disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

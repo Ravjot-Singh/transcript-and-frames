@@ -1,0 +1,81 @@
+# Secrets - never commit. See .env.example for the keys this service needs.
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# Non-production files.
+#
+# The repository is kept to what is needed to build, configure and deploy the
+# service: app/, requirements.txt, Dockerfile, .dockerignore, .env.example, the
+# keep-alive workflow and the docs.
+#
+# NOTE: these files still exist on disk and still work locally - they are simply
+# not version-controlled. They are already excluded from the container image by
+# .dockerignore, so this does not change what gets deployed. Because they are
+# untracked, they live only on this machine: a fresh clone will not contain them.
+# ---------------------------------------------------------------------------
+tests/
+scripts/
+pytest.ini
+requirements-dev.txt
+docker-compose.yml
+
+# ---------------------------------------------------------------------------
+# Build artefacts and local tooling output
+# ---------------------------------------------------------------------------
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test, coverage and type-checker caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+
+# Optional local frame cache (only used by the non-default LocalFileSink)
+storage/
+
+# Media pulled down while testing against real Cloudinary assets
+*.mp3
+*.mp4
+*.jpg
+*.jpeg
+*.png
+!app/static/**
+
+# Logs and local databases
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS clutter
+Thumbs.db
+ehthumbs.db
+desktop.ini
+.DS_Store
