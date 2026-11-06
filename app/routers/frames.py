@@ -25,6 +25,7 @@ class FramesRequest(BaseModel):
                 "width": 1920,
                 "height": 1080,
                 "has_audio": True,
+                "max_frames": 12,
             }
         }
     )
@@ -49,6 +50,17 @@ class FramesRequest(BaseModel):
     height: int | None = Field(None, gt=0, description="Informational; not used in the math.")
     has_audio: bool | None = Field(
         None, description="Informational. Frame sampling is independent of audio."
+    )
+    max_frames: int | None = Field(
+        None,
+        ge=1,
+        description=(
+            "Cap on how many frames to return. The duration curve still decides the "
+            "count — `requested_frame_count` keeps reporting it — and this only limits "
+            "how many are actually produced. The timestamps are recomputed for the "
+            "smaller number, so they stay spread across the video and clustered around "
+            "its midpoint. Useful when each frame costs a downstream call."
+        ),
     )
 
 
@@ -76,6 +88,10 @@ class FramesResponse(BaseModel):
                         ),
                     }
                 ],
+                "frame_urls": [
+                    "https://res.cloudinary.com/demo/video/upload/"
+                    "so_18.468,q_80/v1690000000/samples/clip.jpg"
+                ],
                 "delivery": "url",
                 "elapsed_sec": 0.0006,
             }
@@ -84,17 +100,26 @@ class FramesResponse(BaseModel):
 
     video_id: str
     requested_frame_count: int = Field(
-        ..., description="What the duration curve asked for, before de-duplication."
+        ..., description="What the duration curve asked for, before any cap or de-duplication."
     )
     frame_count: int = Field(
         ...,
         description=(
-            "How many frames are actually returned. Lower than requested only when "
-            "two quantiles round to the same millisecond, which happens on very short videos."
+            "How many frames are actually returned. Lower than requested when "
+            "`max_frames` capped it, or when two quantiles round to the same "
+            "millisecond, which happens on very short videos. Iterate on this."
         ),
     )
     timestamps_sec: list[float]
     frames: list[FrameItem]
+    frame_urls: list[str] = Field(
+        ...,
+        description=(
+            "The same URLs as a flat array, in the same order as `frames` and "
+            "`timestamps_sec`. Pass it straight to a service that takes a list of "
+            "image URLs; use `frames` when you need the timestamp behind a URL."
+        ),
+    )
     delivery: str = Field(
         ..., description="How frames are handed over. 'url' moves no image bytes through this service."
     )
@@ -120,6 +145,7 @@ async def sample_frames(
             width=payload.width,
             height=payload.height,
             has_audio=payload.has_audio,
+            max_frames=payload.max_frames,
         )
     )
     return FramesResponse(
@@ -131,6 +157,7 @@ async def sample_frames(
             FrameItem(index=f.index, timestamp_sec=f.timestamp_sec, url=f.url)
             for f in outcome.frames
         ],
+        frame_urls=outcome.frame_urls,
         delivery=outcome.delivery,
         elapsed_sec=outcome.elapsed_sec,
     )

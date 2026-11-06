@@ -318,7 +318,15 @@
       <label for="vid">video_id</label>
       <input id="vid" value="demo-video" autocomplete="off">
     </div>
+    <div>
+      <label for="maxf">max_frames <span class="hint">(optional cap)</span></label>
+      <input id="maxf" type="number" step="1" min="1" placeholder="uncapped" autocomplete="off">
+    </div>
   </div>
+  <p class="hint" style="margin:8px 0 0">Leave <code>max_frames</code> blank for whatever the
+  curve gives. Setting it caps how many frames come back — <code>requested_frame_count</code>
+  still reports the curve's answer — and the timestamps are recomputed for the smaller number,
+  so they stay spread across the video rather than being truncated to its first part.</p>
   <div class="actions">
     <button class="primary" id="run-frames">Send request</button>
     <button class="ghost" id="curl-frames">Copy as curl</button>
@@ -330,6 +338,18 @@
     <div class="meta-grid" id="frames-meta"></div>
     <div id="frames-timeline"></div>
     <div class="frames" id="frames-grid"></div>
+    <div id="frames-urls" class="hidden" style="margin-top:14px">
+      <h3 style="font-size:0.74rem;text-transform:uppercase;letter-spacing:0.07em;
+                 color:var(--muted);margin:0 0 7px;font-weight:600;
+                 display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span>frame_urls — ready for an image-moderation service</span>
+        <span>
+          <button class="ghost" id="copy-urls-payload">copy as {"urls": [...]}</button>
+          <button class="ghost" data-copy="frames-urls-pre">copy list</button>
+        </span>
+      </h3>
+      <pre id="frames-urls-pre"></pre>
+    </div>
     <div class="io" style="margin-top:14px">
       <div>
         <h3>Request</h3>
@@ -376,10 +396,11 @@
   $("cloud").value = saved.cloud || "";
   $("preset").value = saved.preset || "";
   if (saved.dur) $("dur").value = saved.dur;
+  if (saved.maxf) $("maxf").value = saved.maxf;
   if (saved.theme) document.documentElement.dataset.theme = saved.theme;
   $("keystate").textContent = saved.key ? "· remembered" : "";
 
-  ["base", "key", "url", "cloud", "preset", "dur"].forEach((id) => {
+  ["base", "key", "url", "cloud", "preset", "dur", "maxf"].forEach((id) => {
     $(id).addEventListener("change", () => save({ [id]: $(id).value.trim() }));
   });
 
@@ -579,12 +600,36 @@
 
   // ------------------------------------------------------------ /v1/frames
   function framesBody() {
-    return {
+    const body = {
       cloudinary_url: $("url").value.trim(),
       video_id: $("vid").value.trim() || "demo-video",
       duration_sec: Number($("dur").value),
     };
+    // Omitted entirely when blank, so the request is byte-identical to one sent
+    // before max_frames existed.
+    const cap = Number($("maxf").value);
+    if ($("maxf").value.trim() !== "" && Number.isFinite(cap) && cap >= 1) {
+      body.max_frames = cap;
+    }
+    return body;
   }
+
+  function showFrameUrls(urls) {
+    const box = $("frames-urls");
+    if (!urls || !urls.length) {
+      box.classList.add("hidden");
+      return;
+    }
+    box.classList.remove("hidden");
+    $("frames-urls-pre").textContent = urls.join("\n");
+  }
+
+  // The exact body an image-moderation service taking {"urls": [...]} expects, so it
+  // can be pasted straight into that service's own docs page.
+  $("copy-urls-payload").addEventListener("click", () => {
+    const urls = ($("frames-urls-pre").textContent || "").split("\n").filter(Boolean);
+    copy(JSON.stringify({ urls }, null, 2), $("frames-note"), "payload copied");
+  });
 
   $("curl-frames").addEventListener("click", () =>
     copy(asCurl("/v1/frames", framesBody()), $("frames-note"), "curl copied"));
@@ -663,6 +708,7 @@
     $("frames-timeline").innerHTML = "";
     $("frames-meta").innerHTML = "";
     $("frames-status").innerHTML = "";
+    showFrameUrls(null);
     button.disabled = true;
 
     try {
@@ -676,11 +722,18 @@
         metaGrid($("frames-meta"), [
           ["requested by the curve", data.requested_frame_count],
           ["returned", data.frame_count],
+          [
+            "cap applied",
+            body.max_frames
+              ? (data.frame_count < data.requested_frame_count ? `yes, ${body.max_frames}` : `no effect (${body.max_frames} >= curve)`)
+              : "none",
+          ],
           ["video_id", data.video_id],
           ["delivery", data.delivery],
         ]);
         drawTimeline($("frames-timeline"), data.timestamps_sec || [], body.duration_sec);
         drawFrames($("frames-grid"), data.frames || []);
+        showFrameUrls(data.frame_urls || []);
       } else {
         banner($("frames-meta"),
           (result.json && result.json.message) || "Request failed — see the response below.");

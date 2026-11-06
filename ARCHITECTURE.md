@@ -187,11 +187,15 @@ run_translation()  [translate_pipeline.py]
   │     GET with follow_redirects=False
   │     every 3xx hop → assert_host_allowed() → re-validated, max 3 hops
   │     Content-Length over the cap → 413 before a single body byte is read
-  │     status ≥ 400 → 502 upstream_media_error
+  │     status >= 400        -> 502 upstream_media_error
+  │     connect/read failure -> 502 upstream_media_error (never an opaque 500)
   │
   ├─5 iter_capped(response.aiter_bytes(64 KB))
   │     counts bytes and aborts mid-stream past the cap
   │     Content-Length is a claim by the server; this is the fact
+  │     a read failure here is 502 upstream_media_error, NOT asr_unavailable:
+  │     this code runs inside the provider upload, so without that mapping a
+  │     dropped Cloudinary connection would be reported as the provider's fault
   │
   ├─6 multipart_stream()
   │     wraps those chunks in a form-data envelope
@@ -307,7 +311,7 @@ Extension points that exist as working code rather than as plans:
 
 ## 9. Supporting, non-runtime
 
-- **119 tests**, fully offline — both upstreams are served by
+- **138 tests**, fully offline — both upstreams are served by
   `httpx.MockTransport`, so no network and no quota is used.
 - [`scripts/smoke.py`](scripts/smoke.py) — the live counterpart, and the only
   thing that can reveal whether the Cloudinary account needs

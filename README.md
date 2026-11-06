@@ -11,9 +11,9 @@ service that runs on a free 512 MB / 0.1 CPU instance:
 Neither route depends on the other. Deleting one `include_router` line in
 [`app/main.py`](app/main.py) splits either into its own deployment.
 
-Component-by-component internals are in [ARCHITECTURE.md](ARCHITECTURE.md);
-Render setup and a brief for integrating this into another backend are in
-[DEPLOY_AND_INTEGRATE.md](DEPLOY_AND_INTEGRATE.md).
+Component-by-component internals are in [ARCHITECTURE.md](ARCHITECTURE.md); the
+design for wiring this into a moderation pipeline is in
+[MODERATION_INTEGRATION.md](MODERATION_INTEGRATION.md).
 
 ## How it stays small
 
@@ -170,7 +170,8 @@ either click **Use a public sample** to check the plumbing against Cloudinary's
 `demo` cloud, or paste one of your own video URLs with its duration. Press **Send
 request** on each panel.
 
-A `502 upstream_media_error` here means Cloudinary refused the derived URL; if
+A `502 upstream_media_error` here means Cloudinary refused the derived URL or could
+not be reached; if
 the underlying status is 401, your account has strict transformations enabled and
 `CLOUDINARY_API_SECRET` is required (step 3).
 
@@ -332,6 +333,9 @@ curl -X POST http://127.0.0.1:8000/v1/frames \
     {"index": 0, "timestamp_sec": 18.468,
      "url": "https://res.cloudinary.com/demo/video/upload/so_18.468,q_80/v1/clip.jpg"}
   ],
+  "frame_urls": [
+    "https://res.cloudinary.com/demo/video/upload/so_18.468,q_80/v1/clip.jpg"
+  ],
   "delivery": "url",
   "elapsed_sec": 0.0006
 }
@@ -339,6 +343,23 @@ curl -X POST http://127.0.0.1:8000/v1/frames \
 
 `duration_sec` comes from the Cloudinary upload response your backend already
 receives — no `ffprobe`, no Admin API call.
+
+`frame_urls` is the same list flattened, in the same order, so it can be handed
+straight to anything that takes an array of image URLs. Use `frames` when you need
+the timestamp behind a URL — for instance to say *when* in the video something was
+found.
+
+**Capping the count.** An optional `max_frames` limits how many frames come back:
+
+```bash
+  -d '{"cloudinary_url":"...","video_id":"abc123","duration_sec":300,"max_frames":12}'
+```
+
+`requested_frame_count` still reports what the curve asked for (60 here);
+`frame_count` becomes 12. The timestamps are **recomputed** for the smaller number
+rather than the list being truncated, so the twelve frames remain spread across the
+whole video and still cluster at its midpoint. Worth using when each frame costs a
+downstream call. `MAX_FRAMES_DEFAULT` applies the same cap deployment-wide.
 
 **How many frames.** An asymmetric Gaussian over duration in minutes:
 
@@ -361,8 +382,9 @@ t_i = T/2 + (T/6) * PPF((i + 0.5)/N),  clamped to [0,T], rounded to ms
 
 Frames cluster around the temporal midpoint, where the representative content
 usually is, and thin out toward the ends. A single frame lands exactly at `T/2`.
-`frame_count` can fall below `requested_frame_count` on very short videos, when
-several quantiles round to the same millisecond.
+`frame_count` can fall below `requested_frame_count` when `max_frames` capped it, or
+on very short videos where several quantiles round to the same millisecond. Always
+iterate `frame_count` / the arrays themselves, never `requested_frame_count`.
 
 ### Cloudinary URL handling
 
@@ -467,9 +489,15 @@ The real cause is logged against that id and never put in the body unless
 | `invalid_duration` / `duration_too_long` | 400 | bad `duration_sec` |
 | `feature_disabled` | 400 | `include_native` while `ENABLE_NATIVE_TRANSCRIPT=false` |
 | `audio_too_large` | 413 | derived audio over `MAX_AUDIO_BYTES` |
-| `upstream_media_error` | 502 | Cloudinary refused the derived URL |
+| `upstream_media_error` | 502 | Cloudinary refused the derived URL, **or could not be reached** — a connect/read timeout or dropped connection, including one that happens part-way through streaming the audio |
 | `asr_rate_limited` | 503 + `Retry-After` | provider quota exhausted |
-| `asr_unavailable` | 502 | provider outage or bad credentials |
+| `asr_unavailable` | 502 | provider outage, bad credentials, or a transport failure reaching the provider |
+
+Network failures are attributed to the side that actually failed: anything going
+wrong between this service and Cloudinary is `upstream_media_error`, and anything
+between this service and the speech provider is `asr_unavailable`. That distinction
+matters to a caller's retry policy, which will usually want to back off against the
+service that is actually struggling. Neither becomes an opaque `500`.
 
 ## Security
 
@@ -635,7 +663,7 @@ curl -X POST http://127.0.0.1:8000/v1/translate \
 | `503 asr_not_configured` | `GROQ_API_KEY` is empty |
 | `502 asr_unavailable` | the Groq key was rejected, or Groq is down — check it at <https://console.groq.com/keys> |
 | `503 asr_rate_limited` | free-tier quota exhausted; `Retry-After` says how long |
-| `502 upstream_media_error` | Cloudinary refused the derived URL. A 401 underneath means **strict transformations** — set `CLOUDINARY_API_SECRET` |
+| `502 upstream_media_error` | Cloudinary refused the derived URL, or could not be reached. A 401 underneath means **strict transformations** — set `CLOUDINARY_API_SECRET`; a timeout usually means a transient network fault, so retry once |
 | `413 audio_too_large` | the derived audio exceeded `MAX_AUDIO_BYTES` |
 
 Set `DEBUG_ERRORS=true` in `.env` while developing to have the real upstream
@@ -645,7 +673,7 @@ false in production.
 ## Testing offline
 
 ```bash
-.venv/Scripts/python -m pytest            # 119 tests, no network, no quota
+.venv/Scripts/python -m pytest            # 138 tests, no network, no quota
 ```
 
 Both upstreams are served by `httpx.MockTransport`, so no network and no quota
@@ -655,6 +683,12 @@ parser's acceptance and rejection cases, the streaming byte cap aborting
 mid-stream, the multipart envelope splicing audio intact, provider rate-limit and
 outage mapping, the chunked→spooled upload fallback, redirect re-validation, and
 every access-control path.
+
+It also covers `max_frames` — that capping recomputes the quantiles rather than
+truncating the list, so the frames still span the video — that `frame_urls` mirrors
+`frames[]`, and that Cloudinary connect/read failures map to `502
+upstream_media_error` rather than an opaque `500`, including a connection that drops
+part-way through the audio.
 
 The live path is covered in [Testing locally with real keys](#testing-locally-with-real-keys)
 above. Whether your Cloudinary account needs `CLOUDINARY_API_SECRET` is

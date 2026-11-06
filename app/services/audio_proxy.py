@@ -39,7 +39,16 @@ async def open_audio(
 
     for _ in range(max_redirects + 1):
         request = client.build_request("GET", current, headers={"Accept": "*/*"})
-        candidate = await client.send(request, stream=True, follow_redirects=False)
+        try:
+            candidate = await client.send(request, stream=True, follow_redirects=False)
+        except httpx.HTTPError as exc:
+            # A connect/read timeout or any transport failure reaching Cloudinary is an
+            # upstream media problem, not a defect here. Without this it escapes
+            # unmapped and the caller gets an opaque 500 instead of a 502 their retry
+            # policy can act on.
+            raise UpstreamMediaError(
+                f"transport error fetching the derived audio URL: {exc!r}"
+            ) from exc
 
         if candidate.is_redirect:
             location = candidate.headers.get("location", "")
@@ -88,12 +97,22 @@ async def iter_capped(
     max_bytes: int,
 ) -> AsyncIterator[bytes]:
     """Pass bytes through, aborting if more than ``max_bytes`` arrive."""
+    # This runs inside the multipart body being uploaded to the provider, so a failure
+    # reading from Cloudinary would otherwise surface from the provider's POST and be
+    # reported as asr_unavailable - blaming the wrong service. Attribute it here.
     total = 0
-    async for chunk in source:
-        total += len(chunk)
-        if total > max_bytes:
-            raise AudioTooLarge(f"audio stream exceeded cap {max_bytes} bytes while reading")
-        yield chunk
+    try:
+        async for chunk in source:
+            total += len(chunk)
+            if total > max_bytes:
+                raise AudioTooLarge(
+                    f"audio stream exceeded cap {max_bytes} bytes while reading"
+                )
+            yield chunk
+    except httpx.HTTPError as exc:
+        raise UpstreamMediaError(
+            f"transport error while streaming the derived audio: {exc!r}"
+        ) from exc
 
 
 # --------------------------------------------------------------------- multipart

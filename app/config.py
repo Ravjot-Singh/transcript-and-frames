@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     # Cloudinary q_ value (1-100, HIGHER is better) — not the ffmpeg -q:v scale.
     frame_jpeg_quality: int = 80
     frame_width: int = 0
+    # Deployment-wide cap on frames returned; 0 means no cap. A request's own
+    # max_frames overrides it. Useful when every frame costs a downstream call.
+    max_frames_default: int = 0
     # Only "url" is implemented; the other two are documented stubs that raise
     # NotImplementedError when a request reaches them. Typos are rejected at
     # startup rather than per request.

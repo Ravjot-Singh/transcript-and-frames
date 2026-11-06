@@ -1,5 +1,3 @@
-# Application factory and process-wide wiring.
-
 from __future__ import annotations
 
 import asyncio
